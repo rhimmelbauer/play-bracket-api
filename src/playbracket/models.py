@@ -1,6 +1,24 @@
+
 from django.db import models
+from django.db.models.query import QuerySet
 from django.conf import settings
 from datetime import date
+from typing import TypedDict
+
+
+class PlayerEventResults(TypedDict):
+    name: str
+    won: int
+    lost: int
+    total: int
+    win_ratio: float
+
+
+def hit_ratio(hit: int, total: int) -> float:
+    if not total:
+        return 0
+
+    return (hit / total) * 100
 
 
 class Event(models.Model):
@@ -9,6 +27,31 @@ class Event(models.Model):
     def __str__(self):
         return f"{self.date}"
 
+    def players(self) -> set:
+        return set(player for match in self.matches.all() for player in match.players())
+
+    def player_result(self, player) -> PlayerEventResults:
+        won = self.matches.filter(winners__in=[player]).count()
+        lost = self.matches.filter(losers__in=[player]).count()
+
+        win_ration = hit_ratio(won, (won + lost))
+
+        return PlayerEventResults(
+            name=player.name,
+            won=won,
+            lost=lost,
+            total=(won + lost),
+            win_ratio=win_ration
+        )
+
+    def ranking(self) -> list[PlayerEventResults]:
+        ranking: list[PlayerEventResults] = []
+
+        for player in self.players():
+            ranking.append(self.player_result(player))
+
+        return sorted(ranking, key=lambda d: d["win_ratio"], reverse=True)
+
 
 class Player(models.Model):
     name = models.CharField(max_length=80, blank=False, null=False, unique=True)
@@ -16,12 +59,24 @@ class Player(models.Model):
     def __str__(self):
         return self.name
 
+    def sport_win_ratio(self, sport) -> float:
+        won = self.winners.filter(league__sport=sport).count()
+        lost = self.losers.filter(league__sport=sport).count()
+
+        return hit_ratio(won, (won + lost))
+
+    def league_win_ration(self, league) -> float:
+        won = self.winners.filter(league=league).count()
+        lost = self.losers.filter(league=league).count()
+
+        return hit_ratio(won, (won + lost))
+
 
 class Sport(models.Model):
     name = models.CharField(max_length=80, blank=False, null=False, unique=True)
     players = models.ManyToManyField(Player, blank=True, related_name="players")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -30,8 +85,11 @@ class League(models.Model):
     admins = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="admins")
     sport = models.ForeignKey(Sport, blank=True, null=True, on_delete=models.CASCADE)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
+
+    def players(self) -> QuerySet[Player]:
+        return self.sport.players.all()
 
 
 class Match(models.Model):
@@ -48,3 +106,6 @@ class Match(models.Model):
         return f"({self.pk} - {self.date}) " +\
             f"Winners: {[x for x in self.winners.all().values_list("name", flat=True)]}, " +\
             f"Losers: {[x for x in self.losers.all().values_list("name", flat=True)]}"
+
+    def players(self) -> QuerySet[Player]:
+        return self.winners.all() | self.losers.all()
