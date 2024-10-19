@@ -22,13 +22,22 @@ def hit_ratio(hit: int, total: int) -> float:
 
 
 class Event(models.Model):
+    place = models.CharField(max_length=200, blank=True, null=True)
     date = models.DateField(default=date.today(), null=False, blank=False)
 
     def __str__(self):
+        if self.place:
+            return f"{self.date} - {self.place}"
         return f"{self.date}"
+
+    def matches_display(self) -> list[str]:
+        return [m.__str__() for m in self.matches.all()]
 
     def players(self) -> set:
         return set(player for match in self.matches.all() for player in match.players())
+
+    def players_display(self) -> list[str]:
+        return [p.name for p in self.players()]
 
     def player_result(self, player) -> PlayerEventResults:
         won = self.matches.filter(winners__in=[player]).count()
@@ -59,6 +68,9 @@ class Player(models.Model):
     def __str__(self):
         return self.name
 
+    def sports_display(self) -> list[str]:
+        return self.sports.all().values_list('name', flat=True)
+
     def sport_win_ratio(self, sport) -> float:
         won = self.winners.filter(league__sport=sport).count()
         lost = self.losers.filter(league__sport=sport).count()
@@ -74,10 +86,13 @@ class Player(models.Model):
 
 class Sport(models.Model):
     name = models.CharField(max_length=80, blank=False, null=False, unique=True)
-    players = models.ManyToManyField(Player, blank=True, related_name="players")
+    players = models.ManyToManyField(Player, blank=True, related_name="sports")
 
     def __str__(self) -> str:
         return self.name
+    
+    def players_display(self) -> list[str]:
+        return self.players.all().values_list('name', flat=True)
 
 
 class League(models.Model):
@@ -109,6 +124,15 @@ class Match(models.Model):
 
     def players(self) -> QuerySet[Player]:
         return self.winners.all() | self.losers.all()
+
+    def players_display(self) -> list[str]:
+        return [p.name for p in self.players()]
+
+    def winners_display(self) -> list[str]:
+        return [w.name for w in self.winners.all()]
+
+    def losers_display(self) -> list[str]:
+        return [l.name for l in self.losers.all()]
 
     def validate_winners_losers_fields(self):
         """No player can be both a winner and a loser
