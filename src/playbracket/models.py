@@ -1,5 +1,5 @@
-
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.db.models.query import QuerySet
 from django.conf import settings
 from datetime import date
@@ -65,7 +65,7 @@ class Player(models.Model):
 
         return hit_ratio(won, (won + lost))
 
-    def league_win_ration(self, league) -> float:
+    def league_win_ratio(self, league) -> float:
         won = self.winners.filter(league=league).count()
         lost = self.losers.filter(league=league).count()
 
@@ -109,3 +109,20 @@ class Match(models.Model):
 
     def players(self) -> QuerySet[Player]:
         return self.winners.all() | self.losers.all()
+
+    def validate_winners_losers_fields(self):
+        """No player can be both a winner and a loser
+
+        """
+        winner_in_loser = [True for winner in self.winners.all() if winner in self.losers.all()]
+        loser_in_winner = [True for loser in self.losers.all() if loser in self.winners.all()]
+
+        if winner_in_loser:
+            raise ValidationError("You can't have a winner in the losers field")
+
+        if loser_in_winner:
+            raise ValidationError("You can't have a loser in the winners field")
+
+    def save(self, *args, **kwargs):
+        self.validate_winners_losers_fields()
+        return super().save(*args, **kwargs)
