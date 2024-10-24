@@ -25,10 +25,18 @@ class Event(models.Model):
     place = models.CharField(max_length=200, blank=True, null=True)
     date = models.DateField(default=date.today(), null=False, blank=False)
 
-    def __str__(self):
+    def __str__(self) -> str:
+        self_display = ""
+        if self.pk:
+            self_display += f"({self.pk})"
+
+        if self.date:
+            self_display += f" {self.date}"
+
         if self.place:
-            return f"{self.date} - {self.place}"
-        return f"{self.date}"
+            self_display += f" {self.place}"
+
+        return self_display
 
     def matches_display(self) -> list[str]:
         return [m.__str__() for m in self.matches.all()]
@@ -118,9 +126,11 @@ class Match(models.Model):
     event = models.ForeignKey(Event, related_name="matches", blank=True, null=True, on_delete=models.CASCADE)
 
     def __str__(self):
-        return f"({self.pk} - {self.date}) " +\
-            f"Winners: {[x for x in self.winners.all().values_list("name", flat=True)]}, " +\
-            f"Losers: {[x for x in self.losers.all().values_list("name", flat=True)]}"
+        if self.winners.all().count() and self.losers.all().count():
+            return f"({self.pk} - {self.date}) " +\
+                f"Winners: {[x for x in self.winners.all().values_list("name", flat=True)]}, " +\
+                f"Losers: {[x for x in self.losers.all().values_list("name", flat=True)]}"
+        return f"{self.date}"
 
     def players(self) -> QuerySet[Player]:
         return self.winners.all() | self.losers.all()
@@ -134,19 +144,3 @@ class Match(models.Model):
     def losers_display(self) -> list[str]:
         return [l.name for l in self.losers.all()]
 
-    def validate_winners_losers_fields(self):
-        """No player can be both a winner and a loser
-
-        """
-        winner_in_loser = [True for winner in self.winners.all() if winner in self.losers.all()]
-        loser_in_winner = [True for loser in self.losers.all() if loser in self.winners.all()]
-
-        if winner_in_loser:
-            raise ValidationError("You can't have a winner in the losers field")
-
-        if loser_in_winner:
-            raise ValidationError("You can't have a loser in the winners field")
-
-    def save(self, *args, **kwargs):
-        self.validate_winners_losers_fields()
-        return super().save(*args, **kwargs)
