@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "play-bracket-django"
+name = "play-bracket-api"
 version = "0.1.0"
 description = ""
 authors = ["Roberto Himmelbauer <robertoh89@gmail.com>"]
